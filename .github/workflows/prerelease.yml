@@ -1,0 +1,149 @@
+name: Cross-Platform Build & Daily Pre-Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  # --------------------------------------------------------
+  # Build Svelte (bun) and package frontend into Go embed
+  # --------------------------------------------------------
+  frontend:
+    runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.upload.outputs.cache-key }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Install Bun
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v1
+
+      # Build UI and cache build folder for other jobs
+      - name: Build Svelte UI
+        id: upload
+        working-directory: ui
+        run: |
+          bun install
+          bun run build
+          echo "cache-key=$(date +%s)" >> $GITHUB_OUTPUT
+
+      # Upload build folder
+      - name: Upload build folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-build
+          path: ui/build
+
+  # --------------------------------------------------------
+  # Generate daily release tag (only once)
+  # --------------------------------------------------------
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tagger.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate daily tag
+        id: tagger
+        run: |
+          TODAY=$(date +'%Y-%m-%d')
+          git fetch --tags
+
+          EXISTING=$(git tag | grep "^$TODAY-" | sort -t- -k4 -n || true)
+          if [ -z "$EXISTING" ]; then
+            N=1
+          else
+            LAST=$(echo "$EXISTING" | tail -1 | awk -F- '{print $4}')
+            N=$((LAST + 1))
+          fi
+
+          TAG="$TODAY-$N"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Generated tag: $TAG"
+
+  # --------------------------------------------------------
+  # Cross-platform build matrix
+  # --------------------------------------------------------
+  build:
+    needs: [frontend, tag]
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        # Windows arm64 not built in Go toolchain yet
+        exclude:
+          - goos: windows
+            goarch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Download embedded frontend
+      - name: Download UI build
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-build
+          path: ui/build
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build cross-platform binary
+        run: |
+          ext=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then ext=".exe"; fi
+
+          output="sqlite-gui-${{ matrix.goos }}-${{ matrix.goarch }}$ext"
+
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -o "$output" ./cmd/sqlite-gui/main.go
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: sqlite-gui-*
+          if-no-files-found: error
+
+  # --------------------------------------------------------
+  # Release job (runs after all binaries finish)
+  # --------------------------------------------------------
+  release:
+    needs: [build, tag]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+
+      - name: Create GitHub Pre-Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.tag.outputs.tag }}
+          name: "Automated Cross-Platform Release ${{ needs.tag.outputs.tag }}"
+          prerelease: true
+          files: |
+            sqlite-gui-linux-amd64
+            sqlite-gui-linux-arm64
+            sqlite-gui-darwin-amd64
+            sqlite-gui-darwin-arm64
+            sqlite-gui-windows-amd64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
