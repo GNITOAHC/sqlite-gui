@@ -116,8 +116,8 @@ jobs:
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: binaries
-          path: sqlite-gui-*
+          name: sqlite-gui-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: sqlite-gui-${{ matrix.goos }}-${{ matrix.goarch }}*
           if-no-files-found: error
 
   # --------------------------------------------------------
@@ -131,7 +131,7 @@ jobs:
       - name: Download all binaries
         uses: actions/download-artifact@v4
         with:
-          name: binaries
+          path: dist
 
       - name: Create GitHub Pre-Release
         uses: softprops/action-gh-release@v2
@@ -140,10 +140,6 @@ jobs:
           name: "Automated Cross-Platform Release ${{ needs.tag.outputs.tag }}"
           prerelease: true
           files: |
-            sqlite-gui-linux-amd64
-            sqlite-gui-linux-arm64
-            sqlite-gui-darwin-amd64
-            sqlite-gui-darwin-arm64
-            sqlite-gui-windows-amd64.exe
+            dist/**/sqlite-gui-*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
