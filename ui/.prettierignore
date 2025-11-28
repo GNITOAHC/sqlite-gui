@@ -7,3 +7,11 @@ bun.lockb
 
 # Miscellaneous
 /static/
+
+# shadcn-svelte generated files
+src/lib/components/ui/*/
+src/lib/utils.ts
+src/routes/layout.css
+
+# Prettier
+.prettierrc
