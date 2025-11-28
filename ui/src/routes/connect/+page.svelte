@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	// import { page } from '$app/state';
+	// import { page } from '$app/stores';
+	// import { get } from 'svelte/store';
 	import { replaceState } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api/client';
@@ -8,8 +10,14 @@
 	import ActionInsert from './action-insert.svelte';
 
 	// Access a specific query parameter
-	const paramValue = page.url.searchParams.get('db') ?? '';
-	const initialTable = page.url.searchParams.get('table');
+	// const paramValue = page.url.searchParams.get('db') ?? '';
+	// const initialTable = page.url.searchParams.get('table');
+
+	let db = '';
+	let initialTable: string | null = null;
+
+	// const paramValue = get(page).url.searchParams.get('db') ?? '';
+	// const initialTable = get(page).url.searchParams.get('table');
 
 	// Get all tables
 	let tables: string[] | null = null;
@@ -21,7 +29,7 @@
 
 	async function loadTables() {
 		try {
-			const res = await api<any, { tables: string[] }>(`/tables?db=${paramValue}`);
+			const res = await api<any, { tables: string[] }>(`/tables?db=${db}`);
 			tables = res.tables ?? [];
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load tables';
@@ -34,8 +42,8 @@
 
 		try {
 			const [colsRes, rowsRes] = await Promise.all([
-				api<any, { columns: any[] }>(`/tables/${table}/columns?db=${paramValue}`),
-				api<any, { rows: any[] }>(`/tables/${table}/rows?db=${paramValue}`)
+				api<any, { columns: any[] }>(`/tables/${table}/columns?db=${db}`),
+				api<any, { rows: any[] }>(`/tables/${table}/rows?db=${db}`)
 			]);
 
 			// Avoid setting state if selection changed mid-flight
@@ -53,13 +61,30 @@
 		selectedTable = table;
 		selectionToken += 1;
 		const token = selectionToken;
-		const params = new URLSearchParams(page.url.searchParams);
+		// const params = new URLSearchParams(page.url.searchParams);
+
+		// const p = new URLSearchParams(get(page).url.searchParams);
+		// p.set('table', table);
+		// replaceState(`${get(page).url.pathname}?${p.toString()}`, get(page).state);
+
+		const params = new URLSearchParams(window.location.search);
 		params.set('table', table);
-		replaceState(`${page.url.pathname}?${params.toString()}`, page.state);
+		replaceState(`${window.location.pathname}?${params}`, {});
+
+		// const params = new URLSearchParams(get(page).url.searchParams);
+		// params.set('table', table);
+		// replaceState(`${page.url.pathname}?${params.toString()}`, page.state);
+		// replaceState(`${get(page).url.pathname}?${params.toString()}`, get(page).state);
+
 		loadTableData(table, token);
 	}
 
 	onMount(() => {
+		// const p = get(page).url.searchParams;
+		const p = new URLSearchParams(window.location.search);
+		db = p.get('db') ?? '';
+		initialTable = p.get('table');
+
 		loadTables().then(() => {
 			if (initialTable) {
 				handleSelect(initialTable);
@@ -70,7 +95,7 @@
 
 <div class="space-y-4">
 	<div class="rounded-lg border p-4">
-		<p class="text-sm text-muted-foreground">Database: {paramValue || 'Unknown'}</p>
+		<p class="text-sm text-muted-foreground">Database: {db || 'Unknown'}</p>
 
 		{#if error}
 			<p class="mt-2 text-sm text-destructive">{error}</p>
@@ -109,7 +134,7 @@
 		<div class="rounded-lg border p-4">
 			<h3 class="text-lg font-semibold">Table: {selectedTable}</h3>
 			{#key `${selectedTable ?? 'none'}-${tableCols ? tableCols.length : 'none'}`}
-				<ActionInsert cols={tableCols} table={selectedTable} db={paramValue} />
+				<ActionInsert cols={tableCols} table={selectedTable} {db} />
 			{/key}
 			{#if tableCols === null || tableRows === null}
 				<p class="mt-2 text-sm text-muted-foreground">Loading table data…</p>
@@ -124,16 +149,16 @@
 					</Table.Header>
 					<Table.Body>
 						{#each tableRows as row}
-							<Table.Row>
+							<Table.Row class="relative">
 								{#each tableCols as col}
 									<Table.Cell>{row[col.Name]}</Table.Cell>
 								{/each}
 								<ActionEllipsis
-									className="absolute right-2"
+									className="sticky right-2 max-w-9"
 									{row}
 									cols={tableCols}
 									table={selectedTable}
-									db={paramValue}
+									{db}
 								/>
 							</Table.Row>
 						{/each}
