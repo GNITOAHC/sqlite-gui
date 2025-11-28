@@ -58,8 +58,8 @@ func TestTablesAndColumns(t *testing.T) {
 
 	var parentFK *database.ForeignKey
 	for _, col := range cols {
-		if col.Name == "id" && !col.PrimaryKey {
-			t.Fatalf("id column should be primary key")
+		if col.Name == "id" && (!col.PrimaryKey || col.PrimaryKeyIndex != 1) {
+			t.Fatalf("id column should be primary key with index 1")
 		}
 		if col.Name == "name" && !col.NotNull {
 			t.Fatalf("name column should be NOT NULL")
@@ -97,7 +97,7 @@ func TestCRUDAndQuery(t *testing.T) {
 		t.Fatalf("unexpected rows %v", rows)
 	}
 
-	if err := db.Update(ctx, "users", "id", 1, database.Row{"age": 31}); err != nil {
+	if err := db.Update(ctx, "users", database.Key{"id": 1}, database.Row{"age": 31}); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	rows, err = db.Rows(ctx, "users", 0, 0)
@@ -116,10 +116,53 @@ func TestCRUDAndQuery(t *testing.T) {
 		t.Fatalf("unexpected query result %v", resultRows)
 	}
 
-	if err := db.Delete(ctx, "users", "id", 1); err != nil {
+	if err := db.Delete(ctx, "users", database.Key{"id": 1}); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	rows, err = db.Rows(ctx, "users", 0, 0)
+	if err != nil {
+		t.Fatalf("rows after delete: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected no rows after delete, got %v", rows)
+	}
+}
+
+func TestCompositePrimaryKeyUpdateAndDelete(t *testing.T) {
+	db := newTestDB(t)
+	defer db.Close()
+	ctx := context.Background()
+
+	if _, err := db.Exec(ctx, `CREATE TABLE memberships (
+		user_id INTEGER,
+		team_id INTEGER,
+		role TEXT,
+		PRIMARY KEY (user_id, team_id)
+	)`); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+
+	if err := db.Insert(ctx, "memberships", database.Row{"user_id": 1, "team_id": 2, "role": "member"}); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	key := database.Key{"user_id": 1, "team_id": 2}
+	if err := db.Update(ctx, "memberships", key, database.Row{"role": "admin"}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	rows, err := db.Query(ctx, "SELECT role FROM memberships WHERE user_id = ? AND team_id = ?", 1, 2)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if len(rows) != 1 || rows[0]["role"] != "admin" {
+		t.Fatalf("unexpected row after update: %v", rows)
+	}
+
+	if err := db.Delete(ctx, "memberships", key); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	rows, err = db.Rows(ctx, "memberships", 0, 0)
 	if err != nil {
 		t.Fatalf("rows after delete: %v", err)
 	}

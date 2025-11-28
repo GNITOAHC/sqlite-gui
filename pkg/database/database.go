@@ -12,6 +12,7 @@ var ErrNotConnected = errors.New("database not connected")
 type (
 	ForeignKeyAction string
 	Row              map[string]any
+	Key              map[string]any
 )
 
 type ForeignKey struct {
@@ -31,11 +32,13 @@ const (
 )
 
 type Column struct {
-	Name       string
-	Type       string
-	NotNull    bool // Whether the column can be null
-	Default    sql.NullString
-	PrimaryKey bool
+	Name    string
+	Type    string
+	NotNull bool // Whether the column can be null
+	Default sql.NullString
+
+	PrimaryKey      bool // Column is part of the primary key
+	PrimaryKeyIndex int  // 1-based position within a composite primary key (0 if not part of the PK)
 
 	ForeignKeys []ForeignKey
 }
@@ -63,10 +66,12 @@ type Database interface {
 	Rows(ctx context.Context, table string, limit, offset int) ([]Row, error)
 
 	// UpdateRow updates rows in the specified table that match the given conditions.
-	Update(ctx context.Context, table, pkColumn string, pkValue any, data Row) error
+	// The key must contain all primary-key columns and their values (supports composite PKs).
+	Update(ctx context.Context, table string, key Key, data Row) error
 
 	// DeleteRow deletes rows from the specified table that match the given conditions.
-	Delete(ctx context.Context, table, pkColumn string, pkValue any) error
+	// The key must contain all primary-key columns and their values (supports composite PKs).
+	Delete(ctx context.Context, table string, key Key) error
 
 	// ExecuteQuery executes a raw SQL query and returns the results.
 	Exec(ctx context.Context, query string, args ...any) (sql.Result, error)

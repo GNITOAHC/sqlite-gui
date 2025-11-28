@@ -106,11 +106,12 @@ func (s *SQLite) Columns(ctx context.Context, table string) ([]database.Column, 
 			return nil, err
 		}
 		columns = append(columns, database.Column{
-			Name:       name,
-			Type:       colType,
-			NotNull:    notNull == 1,
-			Default:    defaultVal,
-			PrimaryKey: pk == 1,
+			Name:            name,
+			Type:            colType,
+			NotNull:         notNull == 1,
+			Default:         defaultVal,
+			PrimaryKey:      pk > 0,
+			PrimaryKeyIndex: pk,
 			ForeignKeys: func() []database.ForeignKey {
 				if fks, ok := fkMap[name]; ok {
 					return fks
@@ -163,32 +164,46 @@ func (s *SQLite) Insert(ctx context.Context, table string, data database.Row) er
 	return err
 }
 
-func (s *SQLite) Update(ctx context.Context, table, pkColumn string, pkValue any, data database.Row) error {
+func (s *SQLite) Update(ctx context.Context, table string, key database.Key, data database.Row) error {
 	if err := s.ensureConnected(); err != nil {
 		return err
+	}
+	if len(key) == 0 {
+		return fmt.Errorf("no primary key provided for %s", table)
 	}
 	if len(data) == 0 {
 		return fmt.Errorf("no data to update for %s", table)
 	}
 	keys := orderedKeys(data)
 	setClauses := make([]string, len(keys))
-	args := make([]any, len(keys)+1)
+	args := make([]any, len(keys))
 	for i, key := range keys {
 		setClauses[i] = fmt.Sprintf("%s = ?", quoteIdent(key))
 		args[i] = data[key]
 	}
-	args[len(args)-1] = pkValue
-	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = ?", quoteIdent(table), strings.Join(setClauses, ", "), quoteIdent(pkColumn))
-	_, err := s.db.ExecContext(ctx, query, args...)
+	where, whereArgs, err := buildWhere(key)
+	if err != nil {
+		return err
+	}
+	args = append(args, whereArgs...)
+	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", quoteIdent(table), strings.Join(setClauses, ", "), where)
+	_, err = s.db.ExecContext(ctx, query, args...)
 	return err
 }
 
-func (s *SQLite) Delete(ctx context.Context, table, pkColumn string, pkValue any) error {
+func (s *SQLite) Delete(ctx context.Context, table string, key database.Key) error {
 	if err := s.ensureConnected(); err != nil {
 		return err
 	}
-	query := fmt.Sprintf("DELETE FROM %s WHERE %s = ?", quoteIdent(table), quoteIdent(pkColumn))
-	_, err := s.db.ExecContext(ctx, query, pkValue)
+	if len(key) == 0 {
+		return fmt.Errorf("no primary key provided for %s", table)
+	}
+	where, args, err := buildWhere(key)
+	if err != nil {
+		return err
+	}
+	query := fmt.Sprintf("DELETE FROM %s WHERE %s", quoteIdent(table), where)
+	_, err = s.db.ExecContext(ctx, query, args...)
 	return err
 }
 
@@ -277,6 +292,20 @@ func (s *SQLite) ensureConnected() error {
 		return database.ErrNotConnected
 	}
 	return nil
+}
+
+func buildWhere(key database.Key) (string, []any, error) {
+	if len(key) == 0 {
+		return "", nil, fmt.Errorf("where key is empty")
+	}
+	cols := orderedKeys(key)
+	clauses := make([]string, len(cols))
+	args := make([]any, len(cols))
+	for i, col := range cols {
+		clauses[i] = fmt.Sprintf("%s = ?", quoteIdent(col))
+		args[i] = key[col]
+	}
+	return strings.Join(clauses, " AND "), args, nil
 }
 
 func orderedKeys(m map[string]any) []string {
