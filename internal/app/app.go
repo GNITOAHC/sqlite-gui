@@ -4,10 +4,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
 	"path/filepath"
+	svelte "sqlite-gui"
 	"strings"
 
 	"sqlite-gui/pkg/database"
@@ -64,6 +66,14 @@ func Run() {
 		w.Write([]byte("pong"))
 	})
 	api.RegisterRoutes(mux)
+
+	// SSG file server
+	staticFiles, err := fs.Sub(svelte.SSGFiles, "ui/build")
+	if err != nil {
+		log.Fatal(err)
+	}
+	handle(mux, "/", svelte.CleanHTML(staticFiles))
+
 	handler := corsMiddleware(mux)
 	/*
 	 * ROUTES DEFINITION END
