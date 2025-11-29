@@ -1,5 +1,13 @@
+declare const process: {
+	env: Record<string, string | undefined>;
+};
+if (process.env.NODE_ENV === 'production') {
+	console.log('Running in production mode');
+} else {
+	console.log('Running in development mode, BASE_URL set to localhost');
+}
 // const BASE_URL = 'http://localhost:3000/api';
-const BASE_URL = '/api';
+const BASE_URL = process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:3000/api';
 
 export interface ApiOptions<T> {
 	method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
