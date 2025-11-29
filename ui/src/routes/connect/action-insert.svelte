@@ -48,6 +48,7 @@
 		try {
 			const payload: Record<string, unknown> = {};
 			for (const col of cols) {
+				if (formValues[col.Name] === '') continue; // Ignore empty values
 				payload[col.Name] = formValues[col.Name] ?? null;
 			}
 
