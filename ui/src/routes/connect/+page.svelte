@@ -1,7 +1,4 @@
 <script lang="ts">
-	// import { page } from '$app/state';
-	// import { page } from '$app/stores';
-	// import { get } from 'svelte/store';
 	import { replaceState } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api/client';
@@ -9,15 +6,8 @@
 	import ActionEllipsis from './action-ellipsis.svelte';
 	import ActionInsert from './action-insert.svelte';
 
-	// Access a specific query parameter
-	// const paramValue = page.url.searchParams.get('db') ?? '';
-	// const initialTable = page.url.searchParams.get('table');
-
 	let db = '';
 	let initialTable: string | null = null;
-
-	// const paramValue = get(page).url.searchParams.get('db') ?? '';
-	// const initialTable = get(page).url.searchParams.get('table');
 
 	// Get all tables
 	let tables: string[] | null = null;
@@ -61,20 +51,10 @@
 		selectedTable = table;
 		selectionToken += 1;
 		const token = selectionToken;
-		// const params = new URLSearchParams(page.url.searchParams);
-
-		// const p = new URLSearchParams(get(page).url.searchParams);
-		// p.set('table', table);
-		// replaceState(`${get(page).url.pathname}?${p.toString()}`, get(page).state);
 
 		const params = new URLSearchParams(window.location.search);
 		params.set('table', table);
 		replaceState(`${window.location.pathname}?${params}`, {});
-
-		// const params = new URLSearchParams(get(page).url.searchParams);
-		// params.set('table', table);
-		// replaceState(`${page.url.pathname}?${params.toString()}`, page.state);
-		// replaceState(`${get(page).url.pathname}?${params.toString()}`, get(page).state);
 
 		loadTableData(table, token);
 	}
