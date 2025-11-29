@@ -123,6 +123,65 @@ func (s *SQLite) Columns(ctx context.Context, table string) ([]database.Column, 
 	return columns, rows.Err()
 }
 
+func (s *SQLite) CreateTable(ctx context.Context, name string, columns []database.ColumnDef, ifNotExists bool) error {
+	if err := s.ensureConnected(); err != nil {
+		return err
+	}
+	stmt, err := buildCreateTableSQL(name, columns, ifNotExists)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, stmt)
+	return err
+}
+
+func (s *SQLite) AddColumn(ctx context.Context, table string, column database.ColumnDef) error {
+	if err := s.ensureConnected(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(table) == "" {
+		return fmt.Errorf("table name is required")
+	}
+	if column.PrimaryKey {
+		return fmt.Errorf("adding primary key columns via ALTER TABLE is not supported")
+	}
+	definition, err := buildColumnDefinition(column, false)
+	if err != nil {
+		return err
+	}
+	stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", quoteIdent(table), definition)
+	_, err = s.db.ExecContext(ctx, stmt)
+	return err
+}
+
+func (s *SQLite) DropColumn(ctx context.Context, table, column string) error {
+	if err := s.ensureConnected(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(table) == "" || strings.TrimSpace(column) == "" {
+		return fmt.Errorf("table and column are required")
+	}
+	stmt := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", quoteIdent(table), quoteIdent(column))
+	_, err := s.db.ExecContext(ctx, stmt)
+	return err
+}
+
+func (s *SQLite) DropTable(ctx context.Context, table string, ifExists bool) error {
+	if err := s.ensureConnected(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(table) == "" {
+		return fmt.Errorf("table name is required")
+	}
+	stmt := "DROP TABLE "
+	if ifExists {
+		stmt += "IF EXISTS "
+	}
+	stmt += quoteIdent(table)
+	_, err := s.db.ExecContext(ctx, stmt)
+	return err
+}
+
 func (s *SQLite) Rows(ctx context.Context, table string, limit, offset int) ([]database.Row, error) {
 	if err := s.ensureConnected(); err != nil {
 		return nil, err
@@ -306,6 +365,59 @@ func buildWhere(key database.Key) (string, []any, error) {
 		args[i] = key[col]
 	}
 	return strings.Join(clauses, " AND "), args, nil
+}
+
+func buildCreateTableSQL(name string, columns []database.ColumnDef, ifNotExists bool) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", fmt.Errorf("table name is required")
+	}
+	if len(columns) == 0 {
+		return "", fmt.Errorf("at least one column is required")
+	}
+	pkCount := 0
+	for _, col := range columns {
+		if col.PrimaryKey {
+			pkCount++
+		}
+	}
+	var defs []string
+	var pkCols []string
+	for _, col := range columns {
+		def, err := buildColumnDefinition(col, pkCount == 1 && col.PrimaryKey)
+		if err != nil {
+			return "", err
+		}
+		defs = append(defs, def)
+		if col.PrimaryKey {
+			pkCols = append(pkCols, quoteIdent(col.Name))
+		}
+	}
+	if len(pkCols) > 1 {
+		defs = append(defs, fmt.Sprintf("PRIMARY KEY (%s)", strings.Join(pkCols, ", ")))
+	}
+	stmt := "CREATE TABLE "
+	if ifNotExists {
+		stmt += "IF NOT EXISTS "
+	}
+	stmt += fmt.Sprintf("%s (%s)", quoteIdent(name), strings.Join(defs, ", "))
+	return stmt, nil
+}
+
+func buildColumnDefinition(col database.ColumnDef, allowInlinePK bool) (string, error) {
+	if strings.TrimSpace(col.Name) == "" || strings.TrimSpace(col.Type) == "" {
+		return "", fmt.Errorf("column name and type are required")
+	}
+	parts := []string{quoteIdent(col.Name), col.Type}
+	if col.NotNull {
+		parts = append(parts, "NOT NULL")
+	}
+	if col.Default != nil {
+		parts = append(parts, "DEFAULT "+*col.Default)
+	}
+	if col.PrimaryKey && allowInlinePK {
+		parts = append(parts, "PRIMARY KEY")
+	}
+	return strings.Join(parts, " "), nil
 }
 
 func orderedKeys(m map[string]any) []string {

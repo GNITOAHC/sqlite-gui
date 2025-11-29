@@ -22,12 +22,16 @@ func NewAPI(connections *ConnectionManager) *API {
 func (api *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/connections", api.listConnections)
 	mux.HandleFunc("POST /api/connections", api.addConnection)
+	mux.HandleFunc("POST /api/tables", api.createTable)
 	mux.HandleFunc("GET /api/tables", api.listTables)
 	mux.HandleFunc("GET /api/tables/{table}/columns", api.getColumns)
+	mux.HandleFunc("POST /api/tables/{table}/columns", api.addColumn)
+	mux.HandleFunc("DELETE /api/tables/{table}/columns/{column}", api.dropColumn)
 	mux.HandleFunc("GET /api/tables/{table}/rows", api.getRows)
 	mux.HandleFunc("POST /api/tables/{table}/rows", api.insertRow)
 	mux.HandleFunc("PUT /api/tables/{table}/rows/{id}", api.updateRow)
 	mux.HandleFunc("DELETE /api/tables/{table}/rows/{id}", api.deleteRow)
+	mux.HandleFunc("DELETE /api/tables/{table}", api.dropTable)
 	mux.HandleFunc("POST /api/query", api.query)
 	mux.HandleFunc("POST /api/exec", api.exec)
 }
@@ -80,6 +84,50 @@ func (api *API) addConnection(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// createTable creates a new table with the given columns.
+//
+// Example curl command:
+//
+//	curl -X POST -H "Content-Type: application/json" \
+//	  -d '{
+//	    "name": "memberships",
+//	    "columns": [
+//	      {"name": "user_id", "type": "INTEGER", "primaryKey": true},
+//	      {"name": "team_id", "type": "INTEGER", "primaryKey": true},
+//	      {"name": "role", "type": "TEXT", "notNull": true, "default": "\"member\""}
+//	    ]
+//	  }' \
+//	  "http://localhost:3000/api/tables?db=db1"
+func (api *API) createTable(w http.ResponseWriter, r *http.Request) {
+	db, ok := api.useDB(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Name       string               `json:"name"`
+		IfNotExist bool                 `json:"ifNotExists"`
+		Columns    []database.ColumnDef `json:"columns"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		writeError(w, http.StatusBadRequest, errors.New("table name is required"))
+		return
+	}
+	if len(req.Columns) == 0 {
+		writeError(w, http.StatusBadRequest, errors.New("at least one column is required"))
+		return
+	}
+
+	if err := db.CreateTable(r.Context(), req.Name, req.Columns, req.IfNotExist); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"status": "ok"})
+}
+
 // listTables returns table names for the selected database (?db=name is optional).
 // curl: curl -X GET "http://localhost:3000/api/tables?db=db1"
 func (api *API) listTables(w http.ResponseWriter, r *http.Request) {
@@ -109,6 +157,45 @@ func (api *API) getColumns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"columns": cols})
+}
+
+// addColumn adds a new column to an existing table.
+//
+//	curl: curl -X POST -H "Content-Type: application/json" \
+//	  -d '{"name":"notes","type":"TEXT","default":"\"\""}' \
+//	  "http://localhost:3000/api/tables/memberships/columns?db=db1"
+func (api *API) addColumn(w http.ResponseWriter, r *http.Request) {
+	db, ok := api.useDB(w, r)
+	if !ok {
+		return
+	}
+	table := r.PathValue("table")
+	var req database.ColumnDef
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := db.AddColumn(r.Context(), table, req); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"status": "ok"})
+}
+
+// dropColumn removes a column from an existing table (requires SQLite 3.35+).
+// curl: curl -X DELETE "http://localhost:3000/api/tables/memberships/columns/notes?db=db1"
+func (api *API) dropColumn(w http.ResponseWriter, r *http.Request) {
+	db, ok := api.useDB(w, r)
+	if !ok {
+		return
+	}
+	table := r.PathValue("table")
+	column := r.PathValue("column")
+	if err := db.DropColumn(r.Context(), table, column); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
 // getRows returns rows for a table with optional limit/offset.
@@ -193,6 +280,22 @@ func (api *API) deleteRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.Delete(r.Context(), table, key); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+}
+
+// dropTable deletes an entire table.
+// curl: curl -X DELETE "http://localhost:3000/api/tables/memberships?db=db1"
+func (api *API) dropTable(w http.ResponseWriter, r *http.Request) {
+	db, ok := api.useDB(w, r)
+	if !ok {
+		return
+	}
+	table := r.PathValue("table")
+	ifExists := r.URL.Query().Get("ifExists") != "false"
+	if err := db.DropTable(r.Context(), table, ifExists); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}

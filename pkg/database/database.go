@@ -43,6 +43,14 @@ type Column struct {
 	ForeignKeys []ForeignKey
 }
 
+type ColumnDef struct {
+	Name       string `json:"name"`
+	Type       string `json:"type"`
+	NotNull    bool `json:"notNull"`
+	Default    *string
+	PrimaryKey bool
+}
+
 type Database interface {
 	// Connect establishes a connection to the database with the given connection string.
 	Connect(ctx context.Context, conn string) error
@@ -58,6 +66,18 @@ type Database interface {
 
 	// GetColumns retrieves the column names for a specific table from the database.
 	Columns(ctx context.Context, table string) ([]Column, error)
+
+	// CreateTable creates a table with the provided columns. Supports composite primary keys via ColumnDef.PrimaryKey.
+	CreateTable(ctx context.Context, name string, columns []ColumnDef, ifNotExists bool) error
+
+	// AddColumn adds a new column to an existing table.
+	AddColumn(ctx context.Context, table string, column ColumnDef) error
+
+	// DropColumn removes a existing column.
+	DropColumn(ctx context.Context, table, column string) error
+
+	// DropTable removes an existing table.
+	DropTable(ctx context.Context, table string, ifExists bool) error
 
 	// InsertRow inserts a new row into the specified table with the provided data.
 	Insert(ctx context.Context, table string, data Row) error

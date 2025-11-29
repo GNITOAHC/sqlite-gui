@@ -171,6 +171,31 @@ func TestCompositePrimaryKeyUpdateAndDelete(t *testing.T) {
 	}
 }
 
+func TestDDLOperations(t *testing.T) {
+	db := newTestDB(t)
+	defer db.Close()
+	ctx := context.Background()
+
+	cols := []database.ColumnDef{
+		{Name: "user_id", Type: "INTEGER", PrimaryKey: true},
+		{Name: "team_id", Type: "INTEGER", PrimaryKey: true},
+		{Name: "role", Type: "TEXT", NotNull: true},
+	}
+	if err := db.CreateTable(ctx, "memberships", cols, true); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+
+	if err := db.AddColumn(ctx, "memberships", database.ColumnDef{Name: "notes", Type: "TEXT"}); err != nil {
+		t.Fatalf("add column: %v", err)
+	}
+	if err := db.DropColumn(ctx, "memberships", "notes"); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if err := db.DropTable(ctx, "memberships", true); err != nil {
+		t.Fatalf("drop table: %v", err)
+	}
+}
+
 func newTestDB(t *testing.T) *SQLite {
 	t.Helper()
 	db := New()
