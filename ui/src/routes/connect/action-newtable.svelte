@@ -133,7 +133,7 @@
 					</Button>
 				</div>
 
-				<div class="space-y-3 max-h-80 overflow-y-auto pr-2">
+				<div class="max-h-80 space-y-3 overflow-y-auto pr-2">
 					{#each columns as col, index}
 						<div class="rounded-lg border p-3">
 							<div class="grid gap-3 sm:grid-cols-3">

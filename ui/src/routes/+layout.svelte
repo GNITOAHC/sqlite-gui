@@ -10,7 +10,7 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<div class="max-w-4xl mx-auto">
+<div class="mx-auto max-w-4xl">
 	<Header />
 	{@render children()}
 </div>
