@@ -3,8 +3,11 @@
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api/client';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import ActionEllipsis from './action-ellipsis.svelte';
 	import ActionInsert from './action-insert.svelte';
+	import ActionNewtable from './action-newtable.svelte';
+	import ActionDroptable from './action-droptable.svelte';
 
 	let db = '';
 	let initialTable: string | null = null;
@@ -88,18 +91,17 @@
 			<ul class="mt-2 flex flex-wrap gap-2">
 				{#each tables as table}
 					<li>
-						<button
-							class={`rounded-md border px-3 py-1 text-sm transition ${
-								selectedTable === table
-									? 'bg-primary text-primary-foreground'
-									: 'hover:bg-accent hover:text-accent-foreground'
-							}`}
+						<Button
+							variant={selectedTable === table ? 'default' : 'outline'}
 							onclick={() => handleSelect(table)}
 						>
 							{table}
-						</button>
+						</Button>
 					</li>
 				{/each}
+				<li>
+					<ActionNewtable {db} />
+				</li>
 			</ul>
 		{/if}
 	</div>
@@ -112,7 +114,10 @@
 		</div>
 
 		<div class="rounded-lg border p-4">
-			<h3 class="text-lg font-semibold">Table: {selectedTable}</h3>
+			<div class="flex items-center gap-3">
+				<h3 class="text-lg font-semibold">Table: {selectedTable}</h3>
+				<ActionDroptable table={selectedTable} {db} />
+			</div>
 			{#key `${selectedTable ?? 'none'}-${tableCols ? tableCols.length : 'none'}`}
 				<ActionInsert cols={tableCols} table={selectedTable} {db} />
 			{/key}
