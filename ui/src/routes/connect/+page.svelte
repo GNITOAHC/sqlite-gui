@@ -8,6 +8,7 @@
 	import ActionInsert from './action-insert.svelte';
 	import ActionNewtable from './action-newtable.svelte';
 	import ActionDroptable from './action-droptable.svelte';
+	import ActionSql from './action-sql.svelte';
 
 	let db = '';
 	let initialTable: string | null = null;
@@ -105,6 +106,8 @@
 			</ul>
 		{/if}
 	</div>
+
+	<ActionSql {db} />
 
 	{#if selectedTable}
 		<div class="flex flex-col rounded-lg border">
