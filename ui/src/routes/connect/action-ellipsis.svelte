@@ -4,7 +4,14 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { api } from '$lib/api/client';
 
-	let { className, row, cols, table, db } = $props();
+	let { className, row, cols, table, db, onSuccess } = $props<{
+		className?: string;
+		row: any;
+		cols: any[];
+		table: string;
+		db: string;
+		onSuccess?: () => void;
+	}>();
 
 	const pks = () => {
 		let keys = [];
@@ -31,9 +38,8 @@
 			{ method: 'DELETE' }
 		);
 
-		// console.log(resp);
 		console.log(JSON.stringify(resp));
-		window.location.reload();
+		onSuccess?.();
 	};
 </script>
 

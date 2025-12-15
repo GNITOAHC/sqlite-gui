@@ -11,7 +11,12 @@
 		Default?: unknown;
 	};
 
-	let { cols, table, db } = $props<{ cols: Column[] | null; table: string | null; db: string }>();
+	let { cols, table, db, onSuccess } = $props<{
+		cols: Column[] | null;
+		table: string | null;
+		db: string;
+		onSuccess?: () => void;
+	}>();
 
 	let formValues = $state<Record<string, string>>({});
 	let isSubmitting = $state(false);
@@ -59,9 +64,7 @@
 
 			message = 'Inserted successfully.';
 			resetForm(cols);
-			if (typeof window !== 'undefined') {
-				window.location.reload();
-			}
+			onSuccess?.();
 		} catch (err) {
 			message = err instanceof Error ? err.message : 'Insert failed';
 		} finally {
