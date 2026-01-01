@@ -46,7 +46,7 @@ type Column struct {
 type ColumnDef struct {
 	Name       string `json:"name"`
 	Type       string `json:"type"`
-	NotNull    bool `json:"notNull"`
+	NotNull    bool   `json:"notNull"`
 	Default    *string
 	PrimaryKey bool
 }
