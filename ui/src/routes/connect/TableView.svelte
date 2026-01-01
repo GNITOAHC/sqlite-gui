@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { api } from '$lib/api/client';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { RefreshCcw, Columns2 } from '@lucide/svelte';
 	import ActionEllipsis from './action-ellipsis.svelte';
 	import ActionInsert from './action-insert.svelte';
 	import ActionDroptable from './action-droptable.svelte';
@@ -19,6 +22,18 @@
 	let tableRows = $state<any[] | null>(null);
 	let error = $state<string | null>(null);
 	let loading = $state(false);
+	let hiddenColumns = $state<Set<string>>(new Set());
+
+	const visibleCols = $derived(tableCols?.filter((col) => !hiddenColumns.has(col.Name)) ?? []);
+
+	function toggleColumn(colName: string) {
+		if (hiddenColumns.has(colName)) {
+			hiddenColumns.delete(colName);
+		} else {
+			hiddenColumns.add(colName);
+		}
+		hiddenColumns = new Set(hiddenColumns);
+	}
 
 	async function loadTableData() {
 		loading = true;
@@ -55,15 +70,42 @@
 </script>
 
 <div class="space-y-4">
-	<div class="flex flex-col rounded-lg border">
-		<button onclick={() => console.log(tableCols)}>Console Cols</button>
-		<button onclick={() => console.log(tableRows)}>Console Rows</button>
-	</div>
-
 	<div class="rounded-lg border p-4">
-		<div class="flex items-center gap-3">
-			<h3 class="text-lg font-semibold">Table: {table}</h3>
-			<ActionDroptable {table} {db} />
+		<div class="flex items-center justify-between">
+			<div class="flex items-center gap-3">
+				<h3 class="text-lg font-semibold">Table: {table}</h3>
+				<ActionDroptable {table} {db} />
+			</div>
+			<div class="flex items-center gap-2">
+				<Button variant="ghost" size="icon" onclick={() => refresh()} title="Refresh">
+					<RefreshCcw class="h-4 w-4" />
+				</Button>
+				{#if tableCols && tableCols.length > 0}
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							{#snippet child({ props })}
+								<Button {...props} variant="ghost" size="icon" title="Toggle columns">
+									<Columns2 class="h-4 w-4" />
+								</Button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content align="end">
+							<DropdownMenu.Group>
+								<DropdownMenu.Label>Visible Columns</DropdownMenu.Label>
+								<DropdownMenu.Separator />
+								{#each tableCols as col}
+									<DropdownMenu.CheckboxItem
+										checked={!hiddenColumns.has(col.Name)}
+										onCheckedChange={() => toggleColumn(col.Name)}
+									>
+										{col.Name}
+									</DropdownMenu.CheckboxItem>
+								{/each}
+							</DropdownMenu.Group>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				{/if}
+			</div>
 		</div>
 		{#key `${table}-${tableCols ? tableCols.length : 'none'}`}
 			<ActionInsert cols={tableCols} {table} {db} onSuccess={refresh} />
@@ -78,7 +120,7 @@
 			<Table.Root>
 				<Table.Header>
 					<Table.Row>
-						{#each tableCols as col}
+						{#each visibleCols as col}
 							<Table.Head>{col.Name}</Table.Head>
 						{/each}
 					</Table.Row>
@@ -86,7 +128,7 @@
 				<Table.Body>
 					{#each tableRows as row}
 						<Table.Row class="relative">
-							{#each tableCols as col}
+							{#each visibleCols as col}
 								<Table.Cell>{row[col.Name]}</Table.Cell>
 							{/each}
 							<ActionEllipsis
