@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { replaceState } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
 	import { api } from '$lib/api/client';
@@ -8,7 +8,7 @@
 	import ActionSql from './action-sql.svelte';
 	import TableView from './TableView.svelte';
 
-	let db = $derived(browser ? $page.url.searchParams.get('db') ?? '' : '');
+	let db = $derived(browser ? ($page.url.searchParams.get('db') ?? '') : '');
 	let selectedTable = $derived(browser ? $page.url.searchParams.get('table') : null);
 
 	// Get all tables
@@ -36,7 +36,11 @@
 	function handleSelect(table: string) {
 		const params = new URLSearchParams($page.url.searchParams);
 		params.set('table', table);
-		replaceState(`${$page.url.pathname}?${params}`, {});
+		goto(`${$page.url.pathname}?${params}`, {
+			replaceState: true,
+			noScroll: true,
+			keepFocus: true
+		});
 	}
 </script>
 
@@ -73,7 +77,9 @@
 	<ActionSql {db} />
 
 	{#if selectedTable}
-		<TableView bind:this={tableViewRef} table={selectedTable} {db} />
+		{#key selectedTable}
+			<TableView bind:this={tableViewRef} table={selectedTable} {db} />
+		{/key}
 	{:else}
 		<p class="text-sm text-muted-foreground">Select a table to view its data.</p>
 	{/if}
