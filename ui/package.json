@@ -41,7 +41,6 @@
 		"@codemirror/language": "^6.12.1",
 		"@codemirror/state": "^6.5.3",
 		"@codemirror/view": "^6.39.8",
-		"codemirror": "^6.0.2",
-		"highlight.js": "^11.11.1"
+		"codemirror": "^6.0.2"
 	}
 }
