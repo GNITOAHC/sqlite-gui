@@ -33,25 +33,14 @@
 		error = null;
 		result = null;
 
-		// Simple heuristic
-		const upper = sql.trim().toUpperCase();
-		const isSelect = /^\s*(SELECT|PRAGMA|WITH|VALUES|EXPLAIN)\b/.test(upper);
+		const isSelect = /^\s*(SELECT|PRAGMA|WITH|VALUES|EXPLAIN)\b/i.test(sql.trim());
 		isExec = !isSelect;
 
 		try {
-			if (isSelect) {
-				const res = await api<any, any>(`/query?db=${db}`, {
-					method: 'POST',
-					body: { query: sql, args: [] }
-				});
-				result = res;
-			} else {
-				const res = await api<any, any>(`/exec?db=${db}`, {
-					method: 'POST',
-					body: { query: sql, args: [] }
-				});
-				result = res;
-			}
+			result = await api(`/` + (isSelect ? 'query' : 'exec') + `?db=${db}`, {
+				method: 'POST',
+				body: { query: sql, args: [] }
+			});
 		} catch (e: any) {
 			error = e.message;
 		} finally {
@@ -60,107 +49,58 @@
 	}
 
 	async function updateSchema() {
-		console.log('Updating schema for db:', db);
 		if (!db || !editorView) return;
-		console.log('Fetching tables for db:', db);
-
 		try {
-			const tablesRes = await api<any, { tables: string[] }>(`/tables?db=${db}`);
-			const tables = tablesRes.tables || [];
-
+			const { tables = [] } = await api<any, { tables: string[] }>(`/tables?db=${db}`);
 			const schema: Record<string, string[]> = {};
 
 			await Promise.all(
 				tables.map(async (table) => {
 					try {
-						const colsRes = await api<any, { columns: any[] }>(`/tables/${table}/columns?db=${db}`);
-						schema[table] = (colsRes.columns || []).map((c) => c.Name);
-					} catch (e) {
-						console.error(`Failed to load columns for ${table}`, e);
-					}
+						const { columns = [] } = await api<any, { columns: any[] }>(
+							`/tables/${table}/columns?db=${db}`
+						);
+						schema[table] = columns.map((c) => c.Name);
+					} catch {}
 				})
 			);
 
-			editorView.dispatch({
-				effects: schemaConfig.reconfigure(sqlLang({ schema }))
-			});
-		} catch (e) {
-			console.error('Failed to load schema', e);
-		}
+			editorView.dispatch({ effects: schemaConfig.reconfigure(sqlLang({ schema })) });
+		} catch {}
 	}
 
 	$effect(() => {
-		if (editorView && db) {
-			updateSchema();
-		}
+		if (editorView && db) updateSchema();
 	});
 
 	onMount(() => {
 		if (!editorContainer) return;
 
-		const theme = EditorView.theme({
-			'&': {
-				height: '100%',
-				backgroundColor: 'transparent',
-				fontSize: '0.875rem' // text-sm
-			},
-			'.cm-content': {
-				fontFamily:
-					"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-				padding: '1rem'
-			},
-			'.cm-scroller': {
-				fontFamily: 'inherit'
-			},
-			'&.cm-focused': {
-				outline: 'none'
-			}
-		});
-
-		const startState = EditorState.create({
-			doc: sql,
-			extensions: [
-				keymap.of([
-					{
-						key: 'Mod-Enter',
-						run: () => {
-							runQuery();
-							return true;
-						}
-					},
-					...defaultKeymap,
-					...historyKeymap,
-					...completionKeymap,
-					...closeBracketsKeymap
-				]),
-				history(),
-				drawSelection(),
-				bracketMatching(),
-				closeBrackets(),
-				autocompletion(),
-				syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-				schemaConfig.of(sqlLang()),
-				theme,
-				placeholder('SELECT * FROM table...'),
-				EditorView.updateListener.of((update) => {
-					if (update.docChanged) {
-						sql = update.state.doc.toString();
-					}
-				})
-			]
-		});
+		// prettier-ignore
+		const extensions = [
+			keymap.of([{ key: 'Mod-Enter', run: () => { runQuery(); return true; } }, ...defaultKeymap, ...historyKeymap, ...completionKeymap, ...closeBracketsKeymap]),
+			history(), drawSelection(), bracketMatching(), closeBrackets(), autocompletion(),
+			syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+			schemaConfig.of(sqlLang()), placeholder('SELECT * FROM table...'),
+			EditorView.updateListener.of((u) => { if (u.docChanged) sql = u.state.doc.toString(); }),
+			EditorView.theme({
+				'&': { height: '100%', backgroundColor: 'transparent', fontSize: '0.875rem' },
+				'.cm-content': { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace", padding: '1rem' },
+				'.cm-scroller': { fontFamily: 'inherit' },
+				'&.cm-focused': { outline: 'none' }
+			})
+		];
 
 		editorView = new EditorView({
-			state: startState,
+			state: EditorState.create({ doc: sql, extensions }),
 			parent: editorContainer
 		});
-
 		updateSchema();
 
-		return () => {
-			editorView?.destroy();
-		};
+		return () => editorView?.destroy();
 	});
+
+	let columns = $derived(result?.rows?.length ? Object.keys(result.rows[0]) : []);
 </script>
 
 <div class="space-y-4">
@@ -177,20 +117,17 @@
 	</div>
 
 	{#if error}
-		<div class="rounded-md bg-destructive/10 p-4 text-destructive">
-			Error: {error}
-		</div>
+		<div class="rounded-md bg-destructive/10 p-4 text-destructive">Error: {error}</div>
 	{/if}
 
 	{#if result}
 		{#if !isExec}
-			<!-- Query Result -->
-			{#if result.rows && result.rows.length > 0}
+			{#if columns.length > 0}
 				<div class="overflow-x-auto rounded-md border">
 					<Table.Root>
 						<Table.Header>
 							<Table.Row>
-								{#each Object.keys(result.rows[0]) as col}
+								{#each columns as col}
 									<Table.Head>{col}</Table.Head>
 								{/each}
 							</Table.Row>
@@ -198,7 +135,7 @@
 						<Table.Body>
 							{#each result.rows as row}
 								<Table.Row>
-									{#each Object.keys(result.rows[0]) as col}
+									{#each columns as col}
 										<Table.Cell class="whitespace-nowrap">{row[col]}</Table.Cell>
 									{/each}
 								</Table.Row>
@@ -210,7 +147,6 @@
 				<p class="text-muted-foreground">No results found.</p>
 			{/if}
 		{:else}
-			<!-- Exec Result -->
 			<div class="rounded-md border p-4">
 				<p>Rows Affected: {result.rowsAffected}</p>
 				<p>Last Insert ID: {result.lastInsertId}</p>
