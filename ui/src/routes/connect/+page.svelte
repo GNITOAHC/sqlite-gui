@@ -1,22 +1,26 @@
 <script lang="ts">
 	import { replaceState } from '$app/navigation';
-	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
 	import { api } from '$lib/api/client';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import ActionNewtable from './action-newtable.svelte';
 	import ActionSql from './action-sql.svelte';
 	import TableView from './TableView.svelte';
 
-	let db = '';
-	let initialTable: string | null = null;
+	let db = $derived(browser ? $page.url.searchParams.get('db') ?? '' : '');
+	let selectedTable = $derived(browser ? $page.url.searchParams.get('table') : null);
 
 	// Get all tables
-	let tables: string[] | null = null;
-	let selectedTable: string | null = null;
-	let error: string | null = null;
-	let tableViewRef: TableView;
+	let tables = $state<string[] | null>(null);
+	let error = $state<string | null>(null);
+	let tableViewRef = $state<TableView>();
 
 	async function loadTables() {
+		if (!db) {
+			tables = null;
+			return;
+		}
 		try {
 			const res = await api<any, { tables: string[] }>(`/tables?db=${db}`);
 			tables = res.tables ?? [];
@@ -25,25 +29,15 @@
 		}
 	}
 
-	function handleSelect(table: string) {
-		selectedTable = table;
-
-		const params = new URLSearchParams(window.location.search);
-		params.set('table', table);
-		replaceState(`${window.location.pathname}?${params}`, {});
-	}
-
-	onMount(() => {
-		const p = new URLSearchParams(window.location.search);
-		db = p.get('db') ?? '';
-		initialTable = p.get('table');
-
-		loadTables().then(() => {
-			if (initialTable) {
-				handleSelect(initialTable);
-			}
-		});
+	$effect(() => {
+		loadTables();
 	});
+
+	function handleSelect(table: string) {
+		const params = new URLSearchParams($page.url.searchParams);
+		params.set('table', table);
+		replaceState(`${$page.url.pathname}?${params}`, {});
+	}
 </script>
 
 <div class="space-y-4">

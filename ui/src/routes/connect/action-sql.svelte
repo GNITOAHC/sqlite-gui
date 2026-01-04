@@ -2,11 +2,18 @@
 	import { api } from '$lib/api/client';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import hljs from 'highlight.js/lib/core';
-	import sqlLang from 'highlight.js/lib/languages/sql';
-	import 'highlight.js/styles/github-dark.css';
-
-	hljs.registerLanguage('sql', sqlLang);
+	import { onMount } from 'svelte';
+	import { EditorView, keymap, placeholder, drawSelection } from '@codemirror/view';
+	import { EditorState, Compartment } from '@codemirror/state';
+	import { sql as sqlLang } from '@codemirror/lang-sql';
+	import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+	import { syntaxHighlighting, defaultHighlightStyle, bracketMatching } from '@codemirror/language';
+	import {
+		autocompletion,
+		completionKeymap,
+		closeBrackets,
+		closeBracketsKeymap
+	} from '@codemirror/autocomplete';
 
 	let { db } = $props<{ db: string }>();
 
@@ -16,7 +23,9 @@
 	let loading = $state(false);
 	let isExec = $state(false);
 
-	let highlightedCode = $derived(hljs.highlight(sql || ' ', { language: 'sql' }).value);
+	let editorContainer: HTMLDivElement;
+	let editorView: EditorView;
+	const schemaConfig = new Compartment();
 
 	async function runQuery() {
 		if (!sql.trim()) return;
@@ -50,32 +59,115 @@
 		}
 	}
 
-	function onKeydown(e: KeyboardEvent) {
-		if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-			e.preventDefault();
-			runQuery();
+	async function updateSchema() {
+		console.log('Updating schema for db:', db);
+		if (!db || !editorView) return;
+		console.log('Fetching tables for db:', db);
+
+		try {
+			const tablesRes = await api<any, { tables: string[] }>(`/tables?db=${db}`);
+			const tables = tablesRes.tables || [];
+
+			const schema: Record<string, string[]> = {};
+
+			await Promise.all(
+				tables.map(async (table) => {
+					try {
+						const colsRes = await api<any, { columns: any[] }>(`/tables/${table}/columns?db=${db}`);
+						schema[table] = (colsRes.columns || []).map((c) => c.Name);
+					} catch (e) {
+						console.error(`Failed to load columns for ${table}`, e);
+					}
+				})
+			);
+
+			editorView.dispatch({
+				effects: schemaConfig.reconfigure(sqlLang({ schema }))
+			});
+		} catch (e) {
+			console.error('Failed to load schema', e);
 		}
 	}
+
+	$effect(() => {
+		if (editorView && db) {
+			updateSchema();
+		}
+	});
+
+	onMount(() => {
+		if (!editorContainer) return;
+
+		const theme = EditorView.theme({
+			'&': {
+				height: '100%',
+				backgroundColor: 'transparent',
+				fontSize: '0.875rem' // text-sm
+			},
+			'.cm-content': {
+				fontFamily:
+					"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+				padding: '1rem'
+			},
+			'.cm-scroller': {
+				fontFamily: 'inherit'
+			},
+			'&.cm-focused': {
+				outline: 'none'
+			}
+		});
+
+		const startState = EditorState.create({
+			doc: sql,
+			extensions: [
+				keymap.of([
+					{
+						key: 'Mod-Enter',
+						run: () => {
+							runQuery();
+							return true;
+						}
+					},
+					...defaultKeymap,
+					...historyKeymap,
+					...completionKeymap,
+					...closeBracketsKeymap
+				]),
+				history(),
+				drawSelection(),
+				bracketMatching(),
+				closeBrackets(),
+				autocompletion(),
+				syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+				schemaConfig.of(sqlLang()),
+				theme,
+				placeholder('SELECT * FROM table...'),
+				EditorView.updateListener.of((update) => {
+					if (update.docChanged) {
+						sql = update.state.doc.toString();
+					}
+				})
+			]
+		});
+
+		editorView = new EditorView({
+			state: startState,
+			parent: editorContainer
+		});
+
+		updateSchema();
+
+		return () => {
+			editorView?.destroy();
+		};
+	});
 </script>
 
 <div class="space-y-4">
-	<div class="relative grid min-h-[150px] rounded-md border bg-muted/50 font-mono text-sm">
-		<!-- Highlighter -->
-		<pre
-			aria-hidden="true"
-			class="wrap-break-words pointer-events-none col-start-1 row-start-1 m-0 p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap"><code
-				class="language-sql">{@html highlightedCode}</code
-			><span class="invisible">{' '}</span></pre>
-
-		<!-- Input -->
-		<textarea
-			class="col-start-1 row-start-1 m-0 h-full w-full resize-none overflow-hidden bg-transparent p-4 font-mono text-sm leading-relaxed text-transparent ring-0 outline-none placeholder:text-muted-foreground/50"
-			style="caret-color: var(--foreground);"
-			bind:value={sql}
-			onkeydown={onKeydown}
-			placeholder="SELECT * FROM table..."
-			spellcheck="false"
-		></textarea>
+	<div
+		class="relative min-h-[150px] overflow-hidden rounded-md border bg-muted/50 font-mono text-sm"
+	>
+		<div bind:this={editorContainer} class="h-full w-full"></div>
 	</div>
 
 	<div class="flex justify-end">
@@ -126,17 +218,3 @@
 		{/if}
 	{/if}
 </div>
-
-<style>
-	textarea,
-	pre {
-		font-family:
-			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-			monospace;
-	}
-
-	:global(.hljs) {
-		background: transparent !important;
-		padding: 0 !important;
-	}
-</style>
