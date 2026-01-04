@@ -4,14 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"sqlite-gui/pkg/database"
-	"sqlite-gui/pkg/database/sqlite"
 )
 
 func TestConnectionManagerAddAndGet(t *testing.T) {
 	ctx := context.Background()
-	mgr := NewConnectionManager(func() database.Database { return sqlite.New() })
+	mgr := NewConnectionManager()
 	t.Cleanup(func() {
 		_ = mgr.CloseAll()
 	})
@@ -46,7 +43,7 @@ func TestConnectionManagerAddAndGet(t *testing.T) {
 
 func TestConnectionManagerRejectsDuplicates(t *testing.T) {
 	ctx := context.Background()
-	mgr := NewConnectionManager(func() database.Database { return sqlite.New() })
+	mgr := NewConnectionManager()
 	t.Cleanup(func() {
 		_ = mgr.CloseAll()
 	})

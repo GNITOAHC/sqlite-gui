@@ -5,18 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"sqlite-gui/pkg/database"
+	"sqlite-gui/pkg/database/postgresql"
+	"sqlite-gui/pkg/database/sqlite"
 )
 
 var (
 	ErrConnectionExists = errors.New("connection already exists")
 	ErrConnectionMiss   = errors.New("connection not found")
 )
-
-// databaseFactory creates fresh database instances (e.g. sqlite.New).
-type databaseFactory func() database.Database
 
 type connectionEntry struct {
 	name       string
@@ -28,7 +28,6 @@ type ConnectionManager struct {
 	mu          sync.RWMutex
 	connections map[string]*connectionEntry
 	defaultName string
-	factory     databaseFactory
 }
 
 type ConnectionInfo struct {
@@ -37,10 +36,9 @@ type ConnectionInfo struct {
 	Default    bool   `json:"default"`
 }
 
-func NewConnectionManager(factory databaseFactory) *ConnectionManager {
+func NewConnectionManager() *ConnectionManager {
 	return &ConnectionManager{
 		connections: make(map[string]*connectionEntry),
-		factory:     factory,
 	}
 }
 
@@ -51,7 +49,7 @@ func (m *ConnectionManager) Add(ctx context.Context, name, connString string) er
 	if _, exists := m.connections[name]; exists {
 		return fmt.Errorf("%w: %s", ErrConnectionExists, name)
 	}
-	db := m.factory()
+	db := factory(connString)
 	if err := db.Connect(ctx, connString); err != nil {
 		return err
 	}
@@ -111,4 +109,11 @@ func (m *ConnectionManager) CloseAll() error {
 	m.connections = make(map[string]*connectionEntry)
 	m.defaultName = ""
 	return firstErr
+}
+
+func factory(connString string) database.Database {
+	if strings.HasPrefix(connString, "postgresql://") {
+		return postgresql.New()
+	}
+	return sqlite.New()
 }

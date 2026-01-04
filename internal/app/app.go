@@ -4,16 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/fs"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	svelte "sqlite-gui"
 	"strings"
-
-	"sqlite-gui/pkg/database"
-	"sqlite-gui/pkg/database/sqlite"
 )
 
 const defaultConnectionString = "main=file:sqlite-gui.db?_pragma=foreign_keys(1)"
@@ -35,7 +32,15 @@ func (f *dbFlag) Set(value string) error {
 }
 
 func init() {
-	flag.Var(&dbPaths, "db", "SQLite connection string (repeatable). Format name=connectionString to label the connection.")
+	flag.Usage = func() {
+		w := flag.CommandLine.Output() // Get the output destination (default stderr)
+		fmt.Fprintf(w, "Usage of %s:\n", os.Args[0])
+		fmt.Fprintf(w, "  sqlite-gui helps users maintain databases in a single binary. (Currently support SQLite & PostgreSQL)\n\n")
+		fmt.Fprintf(w, "Flags:\n")
+		flag.PrintDefaults()
+		fmt.Fprintf(w, "\nFor more information, visit https://github.com/GNITOAHC/sqlite-gui.\n")
+	}
+	flag.Var(&dbPaths, "db", "Connection string (repeatable). Format name=connStr to label the connection.")
 }
 
 func Run() {
@@ -45,7 +50,7 @@ func Run() {
 	}
 
 	ctx := context.Background()
-	manager := NewConnectionManager(func() database.Database { return sqlite.New() })
+	manager := NewConnectionManager()
 	for i, raw := range dbPaths {
 		name, conn := parseConnectionArg(raw, fmt.Sprintf("db%d", i+1))
 		if err := manager.Add(ctx, name, conn); err != nil {
@@ -57,27 +62,13 @@ func Run() {
 
 	api := NewAPI(manager)
 
-	/*
-	 * ROUTES DEFINITION START
-	 */
+	// ROUTES DEFINITION START
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ping", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("pong"))
-	})
+	handle(mux, "GET /ping", http.HandlerFunc(pong))
 	api.RegisterRoutes(mux)
-
-	// SSG file server
-	staticFiles, err := fs.Sub(svelte.SSGFiles, "ui/build")
-	if err != nil {
-		log.Fatal(err)
-	}
-	handle(mux, "/", svelte.CleanHTML(staticFiles))
-
+	handle(mux, "/", svelte.FileServer()) // SSG file server (should be last route)
 	handler := corsMiddleware(mux)
-	/*
-	 * ROUTES DEFINITION END
-	 */
+	// ROUTES DEFINITION END
 
 	log.Printf("Starting server on port %d", *port)
 
@@ -108,4 +99,9 @@ func deriveName(raw string) string {
 	base := filepath.Base(conn)
 	base = strings.TrimSuffix(base, ".db")
 	return strings.TrimSpace(base)
+}
+
+func pong(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("pong"))
 }
