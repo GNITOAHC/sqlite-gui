@@ -23,6 +23,11 @@ func New() *Postgres {
 }
 
 func (p *Postgres) Connect(ctx context.Context, conn string) error {
+	// Ensure prepared statement cache is disabled to support connection poolers
+	// like PgBouncer (used by Supabase). Without this, you get errors like:
+	// "prepared statement stmtcache_xxx does not exist"
+	conn = ensureExecMode(conn)
+
 	db, err := sql.Open("pgx", conn)
 	if err != nil {
 		return err
@@ -33,6 +38,19 @@ func (p *Postgres) Connect(ctx context.Context, conn string) error {
 	}
 	p.db = db
 	return nil
+}
+
+// ensureExecMode adds default_query_exec_mode=exec to the connection string
+// if not already present. This disables pgx's prepared statement cache,
+// which is required for connection poolers like PgBouncer/Supabase.
+func ensureExecMode(conn string) string {
+	if strings.Contains(conn, "default_query_exec_mode") {
+		return conn
+	}
+	if strings.Contains(conn, "?") {
+		return conn + "&default_query_exec_mode=exec"
+	}
+	return conn + "?default_query_exec_mode=exec"
 }
 
 func (p *Postgres) Close() error {
@@ -233,7 +251,7 @@ func (p *Postgres) Rows(ctx context.Context, table string, limit, offset int) ([
 	}
 	query := fmt.Sprintf("SELECT * FROM %s", quoteIdent(table))
 	args := []any{}
-	
+
 	// Postgres LIMIT/OFFSET
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", len(args)+1)
@@ -277,22 +295,22 @@ func (p *Postgres) Update(ctx context.Context, table string, key database.Key, d
 	if len(data) == 0 {
 		return fmt.Errorf("no data to update for %s", table)
 	}
-	
+
 	keys := orderedKeys(data)
 	setClauses := make([]string, len(keys))
 	args := make([]any, 0, len(data)+len(key))
-	
+
 	for i, col := range keys {
 		args = append(args, data[col])
 		setClauses[i] = fmt.Sprintf("%s = $%d", quoteIdent(col), len(args))
 	}
-	
+
 	where, whereArgs, err := buildWhere(key, len(args)+1)
 	if err != nil {
 		return err
 	}
 	args = append(args, whereArgs...)
-	
+
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", quoteIdent(table), strings.Join(setClauses, ", "), where)
 	_, err = p.db.ExecContext(ctx, query, args...)
 	return err
