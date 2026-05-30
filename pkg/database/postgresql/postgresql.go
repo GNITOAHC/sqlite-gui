@@ -264,6 +264,46 @@ func (p *Postgres) Rows(ctx context.Context, table string, limit, offset int) ([
 	return p.Query(ctx, query, args...)
 }
 
+func (p *Postgres) Count(ctx context.Context, table string) (int64, error) {
+	if err := p.ensureConnected(); err != nil {
+		return 0, err
+	}
+	rows, err := p.db.QueryContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", quoteIdent(table)))
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var count int64
+		if err := rows.Scan(&count); err != nil {
+			return 0, err
+		}
+		return count, rows.Err()
+	}
+	return 0, rows.Err()
+}
+
+func (p *Postgres) RowsColumns(ctx context.Context, table string, columns []string, limit, offset int) ([]database.Row, error) {
+	if err := p.ensureConnected(); err != nil {
+		return nil, err
+	}
+	quotedCols := make([]string, len(columns))
+	for i, c := range columns {
+		quotedCols[i] = quoteIdent(c)
+	}
+	query := fmt.Sprintf("SELECT %s FROM %s", strings.Join(quotedCols, ", "), quoteIdent(table))
+	args := []any{}
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", len(args)+1)
+		args = append(args, limit)
+	}
+	if offset > 0 {
+		query += fmt.Sprintf(" OFFSET $%d", len(args)+1)
+		args = append(args, offset)
+	}
+	return p.Query(ctx, query, args...)
+}
+
 func (p *Postgres) Insert(ctx context.Context, table string, data database.Row) error {
 	if err := p.ensureConnected(); err != nil {
 		return err

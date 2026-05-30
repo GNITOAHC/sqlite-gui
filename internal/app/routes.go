@@ -198,8 +198,8 @@ func (api *API) dropColumn(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
-// getRows returns rows for a table with optional limit/offset.
-// curl: curl -X GET "http://localhost:3000/api/tables/users/rows?limit=10&offset=0&db=db1"
+// getRows returns rows for a table with optional limit/offset/columns, plus the total row count.
+// curl: curl -X GET "http://localhost:3000/api/tables/users/rows?limit=25&offset=0&columns=id,name&db=db1"
 func (api *API) getRows(w http.ResponseWriter, r *http.Request) {
 	db, ok := api.useDB(w, r)
 	if !ok {
@@ -208,12 +208,34 @@ func (api *API) getRows(w http.ResponseWriter, r *http.Request) {
 	table := r.PathValue("table")
 	limit := queryInt(r, "limit")
 	offset := queryInt(r, "offset")
-	rows, err := db.Rows(r.Context(), table, limit, offset)
+
+	var selectedCols []string
+	if colParam := strings.TrimSpace(r.URL.Query().Get("columns")); colParam != "" {
+		for _, c := range strings.Split(colParam, ",") {
+			if trimmed := strings.TrimSpace(c); trimmed != "" {
+				selectedCols = append(selectedCols, trimmed)
+			}
+		}
+	}
+
+	total, err := db.Count(r.Context(), table)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
+
+	var rows []database.Row
+	if len(selectedCols) > 0 {
+		rows, err = db.RowsColumns(r.Context(), table, selectedCols, limit, offset)
+	} else {
+		rows, err = db.Rows(r.Context(), table, limit, offset)
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"rows": rows, "total": total})
 }
 
 // insertRow inserts a JSON row into the given table.

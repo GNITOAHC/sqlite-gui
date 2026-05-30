@@ -202,6 +202,49 @@ func (s *SQLite) Rows(ctx context.Context, table string, limit, offset int) ([]d
 	return s.Query(ctx, query, args...)
 }
 
+func (s *SQLite) Count(ctx context.Context, table string) (int64, error) {
+	if err := s.ensureConnected(); err != nil {
+		return 0, err
+	}
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", quoteIdent(table)))
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var count int64
+		if err := rows.Scan(&count); err != nil {
+			return 0, err
+		}
+		return count, rows.Err()
+	}
+	return 0, rows.Err()
+}
+
+func (s *SQLite) RowsColumns(ctx context.Context, table string, columns []string, limit, offset int) ([]database.Row, error) {
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
+	}
+	quotedCols := make([]string, len(columns))
+	for i, c := range columns {
+		quotedCols[i] = quoteIdent(c)
+	}
+	query := fmt.Sprintf("SELECT %s FROM %s", strings.Join(quotedCols, ", "), quoteIdent(table))
+	args := []any{}
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+	if offset > 0 {
+		if limit <= 0 {
+			query += " LIMIT -1"
+		}
+		query += " OFFSET ?"
+		args = append(args, offset)
+	}
+	return s.Query(ctx, query, args...)
+}
+
 func (s *SQLite) Insert(ctx context.Context, table string, data database.Row) error {
 	if err := s.ensureConnected(); err != nil {
 		return err

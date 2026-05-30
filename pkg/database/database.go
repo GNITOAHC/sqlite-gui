@@ -85,6 +85,12 @@ type Database interface {
 	// GetRows retrieves rows from the specified table with optional limit and offset for pagination.
 	Rows(ctx context.Context, table string, limit, offset int) ([]Row, error)
 
+	// Count returns the total number of rows in the specified table.
+	Count(ctx context.Context, table string) (int64, error)
+
+	// RowsColumns retrieves rows for selected columns only, with optional pagination.
+	RowsColumns(ctx context.Context, table string, columns []string, limit, offset int) ([]Row, error)
+
 	// UpdateRow updates rows in the specified table that match the given conditions.
 	// The key must contain all primary-key columns and their values (supports composite PKs).
 	Update(ctx context.Context, table string, key Key, data Row) error
