@@ -1,9 +1,9 @@
-name: Cross-Platform Build & Daily Pre-Release
+name: Cross-Platform Build & Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -14,27 +14,20 @@ jobs:
   # --------------------------------------------------------
   frontend:
     runs-on: ubuntu-latest
-    outputs:
-      cache-key: ${{ steps.upload.outputs.cache-key }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # Install Bun
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
 
-      # Build UI and cache build folder for other jobs
       - name: Build Svelte UI
-        id: upload
         working-directory: ui
         run: |
           bun install
           bun run build
-          echo "cache-key=$(date +%s)" >> $GITHUB_OUTPUT
 
-      # Upload build folder
       - name: Upload build folder
         uses: actions/upload-artifact@v7
         with:
@@ -42,39 +35,10 @@ jobs:
           path: ui/build
 
   # --------------------------------------------------------
-  # Generate daily release tag (only once)
-  # --------------------------------------------------------
-  tag:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.tagger.outputs.tag }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Generate daily tag
-        id: tagger
-        run: |
-          TODAY=$(date +'%Y-%m-%d')
-          git fetch --tags
-
-          EXISTING=$(git tag | grep "^$TODAY-" | sort -t- -k4 -n || true)
-          if [ -z "$EXISTING" ]; then
-            N=1
-          else
-            LAST=$(echo "$EXISTING" | tail -1 | awk -F- '{print $4}')
-            N=$((LAST + 1))
-          fi
-
-          TAG="$TODAY-$N"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Generated tag: $TAG"
-
-  # --------------------------------------------------------
   # Cross-platform build matrix
   # --------------------------------------------------------
   build:
-    needs: [frontend, tag]
+    needs: [frontend]
     runs-on: ubuntu-latest
 
     strategy:
@@ -82,7 +46,6 @@ jobs:
       matrix:
         goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
-        # Windows arm64 not built in Go toolchain yet
         exclude:
           - goos: windows
             goarch: arm64
@@ -91,7 +54,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # Download embedded frontend
       - name: Download UI build
         uses: actions/download-artifact@v8
         with:
@@ -128,7 +90,7 @@ jobs:
   # Release job (runs after all binaries finish)
   # --------------------------------------------------------
   release:
-    needs: [build, tag]
+    needs: [build]
     runs-on: ubuntu-latest
 
     steps:
@@ -137,12 +99,12 @@ jobs:
         with:
           path: dist
 
-      - name: Create GitHub Pre-Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ needs.tag.outputs.tag }}
-          name: "Automated Cross-Platform Release ${{ needs.tag.outputs.tag }}"
-          prerelease: true
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+          prerelease: false
           files: |
             dist/**/sqlite-gui-*.tar.gz
         env:
