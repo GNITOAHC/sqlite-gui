@@ -109,18 +109,18 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then ext=".exe"; fi
 
           bin_name="sqlite-gui$ext"
-          archive_name="sqlite-gui-${{ matrix.goos }}-${{ matrix.goarch }}.gz"
+          archive_name="sqlite-gui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
 
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
             go build -o "$bin_name" ./cmd/sqlite-gui/main.go
 
-          gzip -c "$bin_name" > "$archive_name"
+          tar -czf "$archive_name" "$bin_name"
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
           name: sqlite-gui-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: sqlite-gui-${{ matrix.goos }}-${{ matrix.goarch }}.gz
+          path: sqlite-gui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
           if-no-files-found: error
 
   # --------------------------------------------------------
@@ -143,6 +143,6 @@ jobs:
           name: "Automated Cross-Platform Release ${{ needs.tag.outputs.tag }}"
           prerelease: true
           files: |
-            dist/**/sqlite-gui-*.gz
+            dist/**/sqlite-gui-*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
