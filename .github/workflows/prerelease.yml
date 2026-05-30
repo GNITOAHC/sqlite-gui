@@ -19,11 +19,11 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Install Bun
       - name: Install Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
 
       # Build UI and cache build folder for other jobs
       - name: Build Svelte UI
@@ -36,7 +36,7 @@ jobs:
 
       # Upload build folder
       - name: Upload build folder
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-build
           path: ui/build
@@ -50,7 +50,7 @@ jobs:
       tag: ${{ steps.tagger.outputs.tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Generate daily tag
         id: tagger
@@ -89,17 +89,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Download embedded frontend
       - name: Download UI build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ui-build
           path: ui/build
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.22"
 
@@ -117,7 +117,7 @@ jobs:
           tar -czf "$archive_name" "$bin_name"
 
       - name: Upload packaged artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sqlite-gui-${{ matrix.goos }}-${{ matrix.goarch }}
           path: sqlite-gui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
@@ -132,12 +132,12 @@ jobs:
 
     steps:
       - name: Download all binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
 
       - name: Create GitHub Pre-Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.tag.outputs.tag }}
           name: "Automated Cross-Platform Release ${{ needs.tag.outputs.tag }}"
