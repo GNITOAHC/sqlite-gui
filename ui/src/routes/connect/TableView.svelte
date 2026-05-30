@@ -207,6 +207,7 @@
 								<DropdownMenu.CheckboxItem
 									checked={selectedColumns.has(col.Name)}
 									onCheckedChange={() => toggleColumn(col.Name)}
+									closeOnSelect={false}
 								>
 									{col.Name}
 									<span class="ml-1 text-xs text-muted-foreground">{col.Type}</span>
