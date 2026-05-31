@@ -152,6 +152,26 @@
 		if (dataLoaded) loadRows();
 	}
 
+	let pageInputValue = $state('');
+
+	function syncPageInput() {
+		pageInputValue = String(currentPage + 1);
+	}
+
+	function commitPageInput() {
+		const num = parseInt(pageInputValue, 10);
+		if (!isNaN(num) && num >= 1 && num <= totalPages && num - 1 !== currentPage) {
+			currentPage = num - 1;
+			loadRows();
+		} else {
+			syncPageInput();
+		}
+	}
+
+	$effect(() => {
+		syncPageInput();
+	});
+
 	export function refresh() {
 		if (dataLoaded) loadRows();
 		onRefresh?.();
@@ -303,7 +323,25 @@
 						>
 							<ChevronLeft class="h-4 w-4" />
 						</Button>
-						<span class="px-2">Page {currentPage + 1} of {totalPages}</span>
+						<span class="flex items-center gap-1 px-1">
+							<span class="text-muted-foreground">Page</span>
+							<input
+								class="w-12 rounded border bg-background px-1 py-0.5 text-center text-sm focus:ring-1 focus:ring-ring focus:outline-none"
+								type="number"
+								min="1"
+								max={totalPages}
+								value={pageInputValue}
+								disabled={rowsLoading}
+								oninput={(e) => (pageInputValue = (e.target as HTMLInputElement).value)}
+								onblur={commitPageInput}
+								onkeydown={(e) => {
+									if (e.key === 'Enter') {
+										(e.target as HTMLInputElement).blur();
+									}
+								}}
+							/>
+							<span class="text-muted-foreground">of {totalPages}</span>
+						</span>
 						<Button
 							variant="ghost"
 							size="icon"
