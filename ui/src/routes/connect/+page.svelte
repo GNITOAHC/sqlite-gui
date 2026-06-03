@@ -44,6 +44,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>{selectedTable ? `${selectedTable} — ${db}` : db ? db : 'SQLite GUI'}</title>
+</svelte:head>
+
 <div class="space-y-4">
 	<div class="rounded-lg border p-4">
 		<p class="text-sm text-muted-foreground">Database: {db || 'Unknown'}</p>

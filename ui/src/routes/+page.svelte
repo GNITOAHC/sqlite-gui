@@ -14,6 +14,10 @@
 	});
 </script>
 
+<svelte:head>
+	<title>Connections — SQLite GUI</title>
+</svelte:head>
+
 <div>
 	{#if connections}
 		<h2 class="mt-8 mb-4">Available Connections</h2>
