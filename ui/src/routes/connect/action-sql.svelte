@@ -4,7 +4,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import { Copy, Check, ChevronDown } from '@lucide/svelte';
+	import { Copy, Check, ChevronDown, ChevronUp } from '@lucide/svelte';
 	import { onMount } from 'svelte';
 	import { EditorView, keymap, placeholder, drawSelection } from '@codemirror/view';
 	import { EditorState, Compartment } from '@codemirror/state';
@@ -57,6 +57,7 @@
 		loading = true;
 		error = null;
 		result = null;
+		resultOpen = true;
 
 		const isSelect = /^\s*(SELECT|PRAGMA|WITH|VALUES|EXPLAIN)\b/i.test(sql.trim());
 		isExec = !isSelect;
@@ -126,6 +127,7 @@
 	});
 
 	let columns = $derived(result?.rows?.length ? Object.keys(result.rows[0]) : []);
+	let resultOpen = $state(true);
 </script>
 
 <div class="space-y-4">
@@ -141,47 +143,71 @@
 		</Button>
 	</div>
 
-	{#if error}
-		<div class="rounded-md bg-destructive/10 p-4 text-destructive">Error: {error}</div>
-	{/if}
+	{#if result || error}
+		<div class="rounded-md border">
+			<button
+				class="flex w-full items-center justify-between px-4 py-2 text-sm font-medium hover:bg-muted/50"
+				onclick={() => (resultOpen = !resultOpen)}
+			>
+				<span>
+					{#if error}
+						Result — Error
+					{:else if isExec}
+						Result — {result.rowsAffected} row{result.rowsAffected === 1 ? '' : 's'} affected
+					{:else}
+						Result — {result.rows.length} row{result.rows.length === 1 ? '' : 's'}
+					{/if}
+				</span>
+				{#if resultOpen}
+					<ChevronUp class="h-4 w-4 text-muted-foreground" />
+				{:else}
+					<ChevronDown class="h-4 w-4 text-muted-foreground" />
+				{/if}
+			</button>
 
-	{#if result}
-		{#if !isExec}
-			{#if columns.length > 0}
-				<div class="overflow-x-auto rounded-md border">
-					<Table.Root>
-						<Table.Header>
-							<Table.Row>
-								{#each columns as col}
-									<Table.Head>{col}</Table.Head>
-								{/each}
-							</Table.Row>
-						</Table.Header>
-						<Table.Body>
-							{#each result.rows as row}
-								<Table.Row>
-									{#each columns as col}
-										<Table.Cell
-											class="max-w-[200px] cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap hover:bg-muted/70"
-											onclick={() => openCellDialog(col, row[col])}
-										>
-											{row[col]}
-										</Table.Cell>
-									{/each}
-								</Table.Row>
-							{/each}
-						</Table.Body>
-					</Table.Root>
+			{#if resultOpen}
+				<div class="border-t">
+					{#if error}
+						<div class="p-4 text-destructive">Error: {error}</div>
+					{:else if !isExec}
+						{#if columns.length > 0}
+							<div class="overflow-x-auto">
+								<Table.Root>
+									<Table.Header>
+										<Table.Row>
+											{#each columns as col}
+												<Table.Head>{col}</Table.Head>
+											{/each}
+										</Table.Row>
+									</Table.Header>
+									<Table.Body>
+										{#each result.rows as row}
+											<Table.Row>
+												{#each columns as col}
+													<Table.Cell
+														class="max-w-[200px] cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap hover:bg-muted/70"
+														onclick={() => openCellDialog(col, row[col])}
+													>
+														{row[col]}
+													</Table.Cell>
+												{/each}
+											</Table.Row>
+										{/each}
+									</Table.Body>
+								</Table.Root>
+							</div>
+						{:else}
+							<p class="p-4 text-muted-foreground">No results found.</p>
+						{/if}
+					{:else}
+						<div class="p-4">
+							<p>Rows Affected: {result.rowsAffected}</p>
+							<p>Last Insert ID: {result.lastInsertId}</p>
+						</div>
+					{/if}
 				</div>
-			{:else}
-				<p class="text-muted-foreground">No results found.</p>
 			{/if}
-		{:else}
-			<div class="rounded-md border p-4">
-				<p>Rows Affected: {result.rowsAffected}</p>
-				<p>Last Insert ID: {result.lastInsertId}</p>
-			</div>
-		{/if}
+		</div>
 	{/if}
 
 	<!-- Cell Data Dialog -->

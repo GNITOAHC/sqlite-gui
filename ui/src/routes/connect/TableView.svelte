@@ -326,10 +326,11 @@
 						<span class="flex items-center gap-1 px-1">
 							<span class="text-muted-foreground">Page</span>
 							<input
-								class="w-12 rounded border bg-background px-1 py-0.5 text-center text-sm focus:ring-1 focus:ring-ring focus:outline-none"
-								type="number"
-								min="1"
-								max={totalPages}
+								class="rounded border bg-background px-1 py-0.5 text-center text-sm focus:ring-1 focus:ring-ring focus:outline-none"
+								style="width: {Math.max(String(totalPages).length + 2, 4)}ch"
+								type="text"
+								inputmode="numeric"
+								pattern="[0-9]*"
 								value={pageInputValue}
 								disabled={rowsLoading}
 								oninput={(e) => (pageInputValue = (e.target as HTMLInputElement).value)}
